@@ -1,0 +1,231 @@
+-- CREATE DATABASE AND TABLES SETUP
+CREATE DATABASE walmart;
+USE walmart;
+SHOW TABLES;
+
+-- EXPLORE DATA
+SELECT * FROM WALMART_PREPROCESSED;
+
+-- Count the total rows
+SELECT COUNT(*) FROM WALMART_PREPROCESSED;
+
+-- Get distinct branch names, ordered
+SELECT DISTINCT BRANCH FROM WALMART_PREPROCESSED ORDER BY BRANCH;
+
+-- Count distinct payment methods
+SELECT COUNT(DISTINCT PAYMENT_METHOD) FROM WALMART_PREPROCESSED;
+
+-- Get branch-wise count of orders
+SELECT BRANCH, COUNT(*) AS BRANCH_ORDERS FROM WALMART_PREPROCESSED 
+GROUP BY BRANCH ORDER BY BRANCH;
+
+-- Get distinct payment methods and their order counts
+SELECT DISTINCT PAYMENT_METHOD, COUNT(*) AS PAYMENT_ORDERS
+FROM WALMART_PREPROCESSED 
+GROUP BY PAYMENT_METHOD;
+
+-- Count distinct cities
+SELECT COUNT(DISTINCT CITY) FROM WALMART_PREPROCESSED;
+
+-- Get city-wise purchase count
+SELECT DISTINCT CITY, COUNT(*) AS CITY_PURCHASES 
+FROM WALMART_PREPROCESSED 
+GROUP BY CITY 
+ORDER BY CITY_PURCHASES;
+
+-- Get max and min unit price
+SELECT MAX(UNIT_PRICE), MIN(UNIT_PRICE) FROM WALMART_PREPROCESSED;
+
+-- BUSINESS QUERIES
+
+-- Q1: Find different payment methods, number of transactions, and quantity sold by payment method
+SELECT PAYMENT_METHOD, COUNT(*) AS NUMBER_OF_TRANSACTIONS, 
+SUM(QUANTITY) AS QUANTITY_SOLD 
+FROM WALMART_PREPROCESSED 
+GROUP BY PAYMENT_METHOD;
+
+-- Q2: Identify the highest-rated category in each branch
+SELECT BRANCH, CATEGORY, AVG_RATING
+FROM (
+    SELECT BRANCH, CATEGORY, AVG(RATING) AS AVG_RATING, 
+           DENSE_RANK() OVER (PARTITION BY BRANCH ORDER BY AVG(RATING) DESC) AS RK
+    FROM WALMART_PREPROCESSED
+    GROUP BY BRANCH, CATEGORY
+) AS ranked_data
+WHERE RK = 1;
+
+-- Q3: Identify the busiest day for each branch based on the number of transactions
+SELECT DAYNAME(STR_TO_DATE(DATE, '%d/%m/%y')) FROM WALMART_PREPROCESSED;
+
+SELECT BRANCH, DAYY, TRANSACTIONS
+FROM (
+    SELECT BRANCH, DAYNAME(STR_TO_DATE(DATE, '%d/%m/%y')) AS DAYY,
+           COUNT(*) AS TRANSACTIONS, 
+           RANK() OVER (PARTITION BY BRANCH ORDER BY COUNT(*) DESC) AS RK
+    FROM WALMART_PREPROCESSED
+    GROUP BY BRANCH, DAYY
+) AS ranked_data
+WHERE RK = 1;
+
+-- Q4: Calculate the total quantity of items sold per payment method
+SELECT PAYMENT_METHOD, SUM(QUANTITY) AS ITEMS_SOLD 
+FROM WALMART_PREPROCESSED 
+GROUP BY PAYMENT_METHOD 
+ORDER BY ITEMS_SOLD;
+
+-- Q5: Determine the average, minimum, and maximum rating of categories for each city
+SELECT CITY, AVG(RATING) AS AVERAGE, MIN(RATING) AS MINIMUM, MAX(RATING) AS MAXIMUM
+FROM WALMART_PREPROCESSED 
+GROUP BY CITY;
+
+-- Q6: Calculate the total profit for each category
+SELECT CATEGORY, ROUND(SUM(QUANTITY * PROFIT_MARGIN), 2) AS PROFITS 
+FROM WALMART_PREPROCESSED 
+GROUP BY CATEGORY 
+ORDER BY PROFITS DESC;
+
+-- Q7: Determine the most common payment method for each branch
+SELECT BRANCH, PAYMENT_METHOD  
+FROM (
+    SELECT BRANCH, PAYMENT_METHOD, COUNT(*) AS CNT,
+           RANK() OVER (PARTITION BY BRANCH ORDER BY COUNT(*) DESC) AS RK 
+    FROM WALMART_PREPROCESSED 
+    GROUP BY BRANCH, PAYMENT_METHOD  
+) AS X 
+WHERE X.RK = 1;
+
+-- Q8: Categorize sales into Morning, Afternoon, and Evening shifts
+SELECT MAX(HR), MIN(HR) 
+FROM (SELECT HOUR(TIME) AS HR FROM WALMART_PREPROCESSED) AS X;
+
+SELECT BRANCH,
+       (CASE WHEN HOUR(TIME) BETWEEN 6 AND 12 THEN 'MORNING'
+             WHEN HOUR(TIME) BETWEEN 13 AND 17 THEN 'AFTERNOON' 
+             WHEN HOUR(TIME) BETWEEN 18 AND 23 THEN 'EVENING' 
+        END) AS SHIFTS,
+       COUNT(*) AS SALES
+FROM WALMART_PREPROCESSED AS W 
+GROUP BY BRANCH, SHIFTS
+ORDER BY BRANCH, SHIFTS, SALES DESC;
+
+-- Q9: Identify the 5 branches with the highest revenue decrease ratio from last year to current year (e.g., 2022 to 2023)
+SELECT * FROM (
+    SELECT 
+        curr.BRANCH, prev.revenue AS last_year_revenue, 
+        curr.revenue AS current_year_revenue,
+        ROUND((prev.revenue - curr.revenue) / prev.revenue, 2) AS decrease_ratio
+    FROM (
+        SELECT BRANCH, SUM(total_amount) AS revenue
+        FROM WALMART_PREPROCESSED
+        WHERE YEAR(STR_TO_DATE(DATE, '%d/%m/%y')) = 2023
+        GROUP BY BRANCH
+    ) AS curr
+    JOIN (
+        SELECT BRANCH, SUM(total_amount) AS revenue
+        FROM WALMART_PREPROCESSED
+        WHERE YEAR(STR_TO_DATE(DATE, '%d/%m/%y')) = 2022
+        GROUP BY BRANCH
+    ) AS prev
+    ON curr.BRANCH = prev.BRANCH
+) AS revenue_compare
+ORDER BY decrease_ratio DESC
+LIMIT 5;
+
+-- Q10: Calculate the total sales (revenue) made during each shift of the day
+SELECT
+       (CASE WHEN HOUR(TIME) BETWEEN 6 AND 12 THEN 'MORNING' 
+             WHEN HOUR(TIME) BETWEEN 13 AND 17 THEN 'AFTERNOON' 
+             WHEN HOUR(TIME) BETWEEN 18 AND 23 THEN 'EVENING' 
+        END) AS SHIFTS,
+       ROUND(SUM(TOTAL_AMOUNT), 2) AS REVENUE 
+FROM WALMART_PREPROCESSED 
+GROUP BY SHIFTS 
+ORDER BY REVENUE;
+
+-- Q11: Find the category with the highest total profit in each city
+SELECT CITY, CATEGORY, TOTAL_PROFIT
+FROM (
+    SELECT CITY, CATEGORY, SUM(QUANTITY * PROFIT_MARGIN) AS TOTAL_PROFIT,
+           RANK() OVER (PARTITION BY CITY ORDER BY SUM(QUANTITY * PROFIT_MARGIN) DESC) AS RK
+    FROM WALMART_PREPROCESSED
+    GROUP BY CITY, CATEGORY
+) AS ranked_profits
+WHERE RK = 1;
+
+-- Q12: Determine monthly sales trends (total revenue) for each branch
+SELECT BRANCH, 
+       MONTH(STR_TO_DATE(DATE, '%d/%m/%y')) AS Month,
+       ROUND(SUM(TOTAL_AMOUNT), 2) AS Monthly_Revenue
+FROM WALMART_PREPROCESSED
+GROUP BY BRANCH, Month
+ORDER BY BRANCH, Month;
+
+-- Q13: Top 3 most profitable categories
+SELECT CATEGORY, ROUND(SUM(PROFIT_MARGIN * QUANTITY), 2) AS Total_Profit
+FROM WALMART_PREPROCESSED
+GROUP BY CATEGORY
+ORDER BY Total_Profit DESC
+LIMIT 3;
+
+-- Q14: Average transaction value per branch
+SELECT BRANCH, 
+       ROUND(AVG(TOTAL_AMOUNT), 2) AS Avg_Transaction_Value
+FROM WALMART_PREPROCESSED
+GROUP BY BRANCH
+ORDER BY Avg_Transaction_Value DESC;
+
+-- Q15: City with highest quantity sold per category
+SELECT CATEGORY, CITY, QTY_SOLD 
+FROM (
+    SELECT CITY, CATEGORY, SUM(QUANTITY) AS QTY_SOLD,
+           RANK() OVER (PARTITION BY CATEGORY ORDER BY SUM(QUANTITY) DESC) AS RK
+    FROM WALMART_PREPROCESSED
+    GROUP BY CITY, CATEGORY
+) AS X 
+WHERE X.RK = 1;
+
+-- Q16: Branches with above-average sales per transaction – no profit involve
+SELECT BRANCH, 
+       ROUND(AVG(TOTAL_AMOUNT), 2) AS Avg_Sale
+FROM WALMART_PREPROCESSED
+GROUP BY BRANCH
+HAVING Avg_Sale > (
+    SELECT AVG(TOTAL_AMOUNT) FROM WALMART_PREPROCESSED
+);
+
+-- Q17: Compare average profit margins of payment methods
+SELECT PAYMENT_METHOD, 
+       ROUND(AVG(PROFIT_MARGIN * QUANTITY), 2) AS Avg_Transaction_Profit
+FROM WALMART_PREPROCESSED
+GROUP BY PAYMENT_METHOD
+ORDER BY Avg_Transaction_Profit DESC;
+
+-- Q18: Peak sales hour per branch
+SELECT BRANCH, Peak_Hour, TRANSACTIONS
+FROM (
+    SELECT BRANCH, HOUR(TIME) AS PEAK_HOUR,
+           COUNT(*) AS TRANSACTIONS,
+           RANK() OVER (PARTITION BY BRANCH ORDER BY COUNT(*) DESC) AS RK
+    FROM WALMART_PREPROCESSED
+    GROUP BY BRANCH, PEAK_HOUR
+) AS ranked_data
+WHERE RK = 1;
+
+-- Q19: Category-wise contribution to total revenue
+SELECT CATEGORY,
+       ROUND(SUM(TOTAL_AMOUNT), 2) AS Category_Revenue,
+       ROUND(SUM(TOTAL_AMOUNT) * 100 / (SELECT SUM(TOTAL_AMOUNT) FROM WALMART_PREPROCESSED), 2) AS Revenue_Percentage
+FROM WALMART_PREPROCESSED
+GROUP BY CATEGORY
+ORDER BY Revenue_Percentage DESC;
+
+-- Q20: Most and least profitable branches
+SELECT BRANCH, PROFIT 
+FROM (
+    SELECT BRANCH, ROUND(SUM(QUANTITY * PROFIT_MARGIN), 2) AS PROFIT,
+           RANK() OVER (ORDER BY SUM(QUANTITY * PROFIT_MARGIN) ASC) AS ASC_RANK,
+           RANK() OVER (ORDER BY SUM(QUANTITY * PROFIT_MARGIN) DESC) AS DESC_RANK
+    FROM WALMART_PREPROCESSED 
+    GROUP BY BRANCH
+) AS X 
+WHERE X.ASC_RANK = 1 OR X.DESC_RANK = 1;
