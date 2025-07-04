@@ -47,9 +47,9 @@ Used for:
 ## ⚙️ Tools & Technologies
 
 - Python, Pandas, Jupyter Notebook
-- MySQL (Workbench / DBeaver)
+- MySQL (Workbench )
 - Git & GitHub
-- Optional: Seaborn / Matplotlib for visuals
+- Seaborn / Matplotlib for visuals
 
 ---
 
